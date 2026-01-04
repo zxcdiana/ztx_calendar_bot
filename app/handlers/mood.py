@@ -119,7 +119,7 @@ class MoodMonthHandler(BaseHandler[Message | CallbackQuery]):
             InlineKeyboardButton(
                 text=f"« {cls.str_month(data['i18n'], month=workflow_date.month).lower()[:3:]}",
                 callback_data=MoodMonthCallback.merge(
-                    cd, month=workflow_date.month
+                    cd, year=workflow_date.year, month=workflow_date.month
                 ).pack(),
             )
         ]
