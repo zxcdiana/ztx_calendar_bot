@@ -5,8 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs
 
-from app.mood.types import Mood
-
 
 class Base(DeclarativeBase, AsyncAttrs):
     def __init_subclass__(cls, table: str, **kw):
@@ -15,16 +13,15 @@ class Base(DeclarativeBase, AsyncAttrs):
 
     @classmethod
     def from_model(cls, obj: BaseModel):
-        return cls(
-            **{k: getattr(obj, k) for k in map(lambda x: x.name, inspect(cls).columns)}
-        )
+        data = obj.model_dump(mode="json")
+        return cls(**{k: data[k] for k in map(lambda x: x.name, inspect(cls).columns)})
 
 
 class MoodMonth(Base, table="mood"):
     user_id: Mapped[int] = mapped_column(primary_key=True)
     year: Mapped[int] = mapped_column(primary_key=True)
     month: Mapped[int] = mapped_column(primary_key=True)
-    days: Mapped[list[Mood]] = mapped_column(JSON, nullable=False)
+    days: Mapped[list[int]] = mapped_column(JSON, nullable=False)
 
 
 class UserConfig(Base, table="users"):

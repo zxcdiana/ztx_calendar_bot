@@ -1,6 +1,8 @@
-from datetime import datetime
 import math
 from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
 from aiogram import F
 from aiogram.types import (
     Message,
@@ -11,35 +13,28 @@ from aiogram.types import (
 from aiogram.handlers import BaseHandler as _BaseHandler
 from aiogram.filters import or_f, Command
 
-from app.handlers.middlewares import MiddlewareData
-
-
-from dateutil.relativedelta import relativedelta
-
-
 from sqlalchemy import select
 
 
-from app import orm, utils
+from app import utils
 from app.handlers.callback_data import (
     MarkMoodDay,
     OpenMoodDay,
     MoodMonthCallback,
     empty_callback_data,
 )
+from app.handlers.middlewares import MiddlewareData
 from app.i18n import I18nContext
-from app.mood.types import (
+from app.mood import (
     Mood,
-    MoodEmoji,
-    MoodMonth,
     date_to_dict,
-    mood_to_str,
 )
-from app.routers import dp, mood_router
+from app.database import MoodMonth, orm
+from app.main import dp, mood_router
 
 
 class BaseHandler[T](_BaseHandler[T]):
-    data: MiddlewareData  # pyright: ignore[reportIncompatibleVariableOverride]
+    data: MiddlewareData  # type: ignore
     callback_data: Any
 
     @property
@@ -90,8 +85,8 @@ class MoodMonthHandler(BaseHandler[Message | CallbackQuery]):
             *utils.chunks(
                 (
                     InlineKeyboardButton(
-                        text=f"{day}. {list(MoodEmoji)[mood]}"
-                        if mood != Mood.UNSET
+                        text=f"{day}. {mood.emoji}"
+                        if mood is not Mood.UNSET
                         else str(day),
                         callback_data=(
                             OpenMoodDay.merge(cd, day=day)
@@ -135,7 +130,7 @@ class MoodMonthHandler(BaseHandler[Message | CallbackQuery]):
 
         row += [
             InlineKeyboardButton(
-                text="✏️" + ["🗑", *list(MoodEmoji)[1:], ""][mark],
+                text="✏️" + ["🗑", *map(str, list(Mood)[1:]), ""][mark],
                 callback_data=MoodMonthCallback.merge(
                     cd, mark=next_mark, alert_marker=True
                 ).pack(),
@@ -169,11 +164,12 @@ class MoodMonthHandler(BaseHandler[Message | CallbackQuery]):
         if call:
             cd = self.cd
             assert isinstance(cd, MoodMonthCallback)
-            await call.message.edit_text(**panel)
+            await call.message.edit_text(**panel)  # type: ignore
             if cd.alert_marker and cd.marker != -1:
+                mood = Mood.convert(cd.marker)
                 await self.event.answer(
                     self.data["i18n"].mood_marker_selected(
-                        marker=f"{list(MoodEmoji)[cd.marker]} {list(Mood)[cd.marker]}"
+                        marker=f"{str(mood)} {self.data['i18n'].get(f'mood.{mood.name.lower()}')}"
                     )
                 )
         else:
@@ -196,20 +192,21 @@ class OpenMoodDayHandler(BaseHandler[CallbackQuery]):
         mood_month = await MoodMonthHandler.get_mood_month(cd)
         prev_day = cd.date - relativedelta(days=1)
         next_day = cd.date + relativedelta(days=1)
+        mood = mood_month.get_mood(cd.date.day)
         text = data["i18n"].mood_day(
             year=str(cd.date.year),
             month=data["i18n"].get(f"month_{cd.date.month}"),
             day=str(cd.date.day),
-            mood=mood_to_str(mood_month.get_mood(cd.date.day)),
-            mood_emoji=list(MoodEmoji)[mood_month.get_mood(cd.date.day)],
+            mood=mood.name.lower(),
+            mood_emoji=str(mood),
         )
         kb = [
             *utils.chunks(
                 [
                     InlineKeyboardButton(
-                        text=f"{list(MoodEmoji)[mood]} {data['i18n'].get(f'mood-{mood_to_str(mood)}')}",
+                        text=f"{str(mood)} {data['i18n'].get(f'mood-{mood.name.lower()}')}",
                         callback_data=MarkMoodDay.merge(
-                            cd, value=mood, go_to="day"
+                            cd, value=int(mood), go_to="day"
                         ).pack(),
                     )
                     for mood in list(Mood)[1:]
@@ -220,7 +217,7 @@ class OpenMoodDayHandler(BaseHandler[CallbackQuery]):
                 InlineKeyboardButton(
                     text=data["i18n"].mood.unset(),
                     callback_data=MarkMoodDay.merge(
-                        cd, value=Mood.UNSET, go_to="day"
+                        cd, value=int(Mood.UNSET), go_to="day"
                     ).pack(),
                 )
             ],
@@ -247,7 +244,7 @@ class OpenMoodDayHandler(BaseHandler[CallbackQuery]):
 
     async def handle(self):
         panel = await self.panel(self.data)
-        await self.event.message.edit_text(**panel)
+        await self.event.message.edit_text(**panel)  # type: ignore
 
 
 mood_router.callback_query.register(OpenMoodDayHandler, OpenMoodDay.filter())
@@ -260,7 +257,7 @@ class MarkMoodDayHandler(BaseHandler[CallbackQuery]):
         cd: MarkMoodDay = self.cd
         assert isinstance(cd, MarkMoodDay)
         mood_month = await MoodMonthHandler.get_mood_month(cd)
-        mood_month.days[cd.day - 1] = cd.value
+        mood_month.days[cd.day - 1] = Mood.convert(cd.value)
 
         async with self.data["db"].begin() as session:
             await session.merge(orm.MoodMonth.from_model(mood_month))
@@ -272,7 +269,7 @@ class MarkMoodDayHandler(BaseHandler[CallbackQuery]):
             self.data["callback_data"] = MoodMonthCallback.merge(cd)
             panel = await MoodMonthHandler.panel(self.data)
 
-        await self.event.message.edit_text(**panel)
+        await self.event.message.edit_text(**panel)  # type: ignore
 
 
 mood_router.callback_query.register(MarkMoodDayHandler, MarkMoodDay.filter())

@@ -2,28 +2,24 @@ from aiogram import F
 from aiogram.types import CallbackQuery
 from aiogram.filters import MagicData
 
-from app.config import app_cfg
-from app.routers import main_router, commands_router
-from app.handlers.callback_data import CallbackData
-from app.i18n import I18nContext
+from app.handlers.middlewares import MiddlewareData
+from app.main import main_router, admin_router, commands_router
 
 
-@main_router.callback_query.filter
-async def button_user_filter(
-    call: CallbackQuery, callback_data: CallbackData, i18n: I18nContext
-):
+@main_router.callback_query.middleware  # type: ignore
+async def button_user_filter(handler, event: CallbackQuery, data: MiddlewareData):
     if (
-        callback_data.user_id == call.from_user.id
-        or call.from_user.id in app_cfg.owners
+        data["callback_data"].user_id == event.from_user.id
+        or event.from_user.id in data['app_cfg'].owners
     ):
-        return True
+        return await handler(event, data)
 
-    await call.answer(i18n.error.button_wrong_user(), cache_time=99999)
+    await event.answer(data["i18n"].error.button_wrong_user(), cache_time=99999)
 
 
-admin_f = MagicData(F.event_context.user_id.in_(app_cfg.owners))
-main_router.callback_query.filter(admin_f)
-main_router.inline_query.filter(admin_f)
-main_router.message.filter(admin_f)
+admin_f = MagicData(F.event_context.user_id.in_(F.app_cfg.owners))
+admin_router.callback_query.filter(admin_f)
+admin_router.inline_query.filter(admin_f)
+admin_router.message.filter(admin_f)
 
 commands_router.message.filter(~F.forward_origin & ~F.via_bot)

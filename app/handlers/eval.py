@@ -1,23 +1,20 @@
 # ruff: noqa: E401, F401
 
+import re
+import sys
+import meval
+import inspect
+import traceback
 from contextlib import suppress
 from dataclasses import dataclass
-import inspect
-import re
-import traceback
-from typing import Any, Self, Union
-
-
 from unittest.mock import sentinel
-import meval
-
-from app import utils
-import sys
+from typing import Any, Self, Union
 
 from aiogram.types import Message
 from aiogram.filters import Command
 
-from app.routers import admin_router
+from app.main import admin_router
+from app import utils
 
 
 __all__ = ("AsyncEval",)

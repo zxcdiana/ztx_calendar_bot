@@ -1,16 +1,15 @@
+import asyncio
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 
-from app.config import AppConfig
-from app.services import Database, Scheduler
-from app.loggers import setup_logging
-from app.routers import dp
-from app.i18n import create_i18n_middleware
+from app.database import Database
+from app.scheduler import Scheduler
 
+from app.main import app_cfg, dp, setup_logging, create_i18n_middleware
 
 setup_logging()
 
-dp["app_cfg"] = app_cfg = AppConfig.model_validate({})
+dp["app_cfg"] = app_cfg
 dp["db"] = Database()
 dp["scheduler"] = Scheduler()
 create_i18n_middleware().setup(dp)
@@ -25,6 +24,13 @@ bot = Bot(
     ),
 )
 
+
+@dp.startup()
+async def get_loop(dispatcher):
+    dispatcher["loop"] = asyncio.get_running_loop()
+
+
 import app.handlers  # noqa: E402, F401
+
 
 dp.run_polling(bot)

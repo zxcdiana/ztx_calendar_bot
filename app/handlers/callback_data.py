@@ -1,7 +1,7 @@
 from typing import Any, Literal
 from aiogram.filters.callback_data import CallbackData as _CallbackData
 
-from app.mood.types import _MoodMonthMixin, Mood
+from app.mood import _MoodMonthMixin
 
 
 class CallbackData(_CallbackData, prefix="*"):
@@ -41,7 +41,7 @@ class OpenMoodDay(MoodMonthCallback, _MoodMonthMixin):
 
 
 class MarkMoodDay(OpenMoodDay):
-    value: Mood
+    value: int
     go_to: Literal["day", "month"]
 
 

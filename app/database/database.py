@@ -3,8 +3,6 @@ from __future__ import annotations
 from abc import ABCMeta
 import asyncio
 from contextlib import asynccontextmanager
-import re
-from datetime import UTC
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -13,17 +11,18 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from aiogram.types import Update, User
 from aiogram.dispatcher.event.bases import skip
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
-from app import loggers, orm
-from app.routers import dp
-from app.config import app_cfg
-from app.orm import Base
-from app.types import UserConfig
+from app import utils
+from app.database.models import UserConfig
+from app.database import orm
+from app.main import app_cfg, dp
+
 
 if TYPE_CHECKING:
     from app.handlers.middlewares import MiddlewareData
+
+
+logger = utils.get_logger()
 
 
 class Singleton(ABCMeta):
@@ -64,7 +63,7 @@ class Database(metaclass=Singleton):
 
     async def startup(self):
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(orm.Base.metadata.create_all)
 
     def extract_users(self, event: BaseModel) -> list[User]:
         users: list[User] = []
@@ -117,11 +116,9 @@ class Database(metaclass=Singleton):
                             user_config.last_name = user.last_name
                             user_config.username = user.username
                             await session.merge(orm.UserConfig.from_model(user_config))
-                            loggers.database.info(
-                                f"saved user {user.id}:{user.full_name}"
-                            )
+                            logger.info(f"saved user {user.id}:{user.full_name}")
                 except Exception:
-                    loggers.database.exception("Save user error")
+                    logger.exception("Save user error")
                 finally:
                     await asyncio.sleep(0.5)
 
@@ -145,24 +142,3 @@ class Database(metaclass=Singleton):
 
         async with self.begin() as session:
             await session.merge(orm.UserConfig.from_model(obj))
-
-
-def wrap(fn):
-    async def _():
-        return fn()
-
-    return _
-
-
-class Scheduler(AsyncIOScheduler, metaclass=Singleton):
-    def __init__(self):
-        super().__init__(timezone=UTC)
-
-        db_url = app_cfg.database_uri.get_secret_value()
-        if r := re.fullmatch(r"(.+?)\+(aiosqlite|asyncpg)", db_url.split(":")[0]):
-            db_url = r.group(1) + ":" + db_url.split(":", maxsplit=1)[1]
-
-        self.jobstore = SQLAlchemyJobStore(db_url)
-        self.add_jobstore(self.jobstore)
-        dp.startup.register(wrap(self.start))
-        dp.shutdown.register(wrap(self.shutdown))

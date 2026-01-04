@@ -4,9 +4,11 @@ from aiogram import F
 import aiohttp
 from pydantic import BaseModel
 from yarl import URL
-from app import loggers
-from app.routers import main_router
+from app import utils
+from app.main import main_router
 from aiogram.types import Message, BufferedInputFile, ChatFullInfo
+
+logger = utils.get_logger()
 
 
 class Quoter:
@@ -18,7 +20,7 @@ class Quoter:
             messages = (messages,)
 
         data = {"messages": [await self.pack_message(m) for m in messages]}
-        loggers.core.info(f"qu: {data=}")
+        logger.info(f"qu: {data=}")
         async with (
             aiohttp.ClientSession() as session,
             session.post(self.api / "generate.webp", json=data) as response,
