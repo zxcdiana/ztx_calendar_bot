@@ -1,7 +1,6 @@
 from pydantic import BaseModel
-from sqlalchemy import JSON, TEXT, inspect
+from sqlalchemy import JSON, BigInteger, Integer, String, inspect
 from sqlalchemy.orm import Mapped, mapped_column
-
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs
 
@@ -18,16 +17,16 @@ class Base(DeclarativeBase, AsyncAttrs):
 
 
 class MoodMonth(Base, table="mood"):
-    user_id: Mapped[int] = mapped_column(primary_key=True)
-    year: Mapped[int] = mapped_column(primary_key=True)
-    month: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, primary_key=True)
+    month: Mapped[int] = mapped_column(Integer, primary_key=True)
     days: Mapped[list[int]] = mapped_column(JSON, nullable=False)
 
 
 class UserConfig(Base, table="users"):
-    user_id: Mapped[int] = mapped_column(primary_key=True)
-    first_name: Mapped[str | None] = mapped_column(TEXT, nullable=True)
-    last_name: Mapped[str | None] = mapped_column(TEXT, nullable=True)
-    username: Mapped[str | None] = mapped_column(TEXT, nullable=True, unique=True)
-    locale: Mapped[str | None] = mapped_column(TEXT, nullable=True)
-    timezone: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    first_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
+    locale: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)

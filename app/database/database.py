@@ -49,7 +49,7 @@ class Cache(metaclass=Singleton):
 
 class Database(metaclass=Singleton):
     def __init__(self) -> None:
-        self.engine = create_async_engine(app_cfg.database_uri.get_secret_value())
+        self.engine = create_async_engine(app_cfg.get_db_uri(mode="async"))
         self.sessionmaker = async_sessionmaker(self.engine)
         self.cache = Cache()
 

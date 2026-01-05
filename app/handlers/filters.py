@@ -10,7 +10,7 @@ from app.main import main_router, admin_router, commands_router
 async def button_user_filter(handler, event: CallbackQuery, data: MiddlewareData):
     if (
         data["callback_data"].user_id == event.from_user.id
-        or event.from_user.id in data['app_cfg'].owners
+        or event.from_user.id in data["app_cfg"].owners
     ):
         return await handler(event, data)
 

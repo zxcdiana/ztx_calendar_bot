@@ -1,3 +1,5 @@
+bot_command-mood = Календарь настроения
+
 mood-unset = Не указано
 mood-awesome = Прекрасно
 mood-greet = Здорово
