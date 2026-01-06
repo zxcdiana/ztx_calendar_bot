@@ -22,7 +22,6 @@ from app.i18n import FluentRuntimeCore, I18nMiddleware, I18nMiddlewareManager
 APP_DIR = Path(__file__).parent.parent
 CONFIG_DIR = platformdirs.user_config_path("ztx_calendar_bot", ensure_exists=True)
 DATABASE_PATH = CONFIG_DIR / "database.sqlite3"
-_LOCAL_DATABASE_URI = f"sqlite+aiosqlite:///{DATABASE_PATH}"
 LOCALES_DIR = APP_DIR / "locales/"
 
 

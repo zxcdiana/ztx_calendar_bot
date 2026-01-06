@@ -1,0 +1,20 @@
+services:
+  bot: 
+    build: .
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_URI: postgres://postgres:postgres@db:5432/postgres
+  
+  db:
+    image: postgres:18
+    volumes: 
+      - pgdata:/var/lib/postgresql/
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGPORT: 5432
+
+volumes:
+  pgdata:

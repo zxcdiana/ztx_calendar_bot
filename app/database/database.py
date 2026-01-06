@@ -62,8 +62,14 @@ class Database(metaclass=Singleton):
         dp.update.handlers.insert(0, registered)
 
     async def startup(self):
-        async with self.engine.begin() as conn:
-            await conn.run_sync(orm.Base.metadata.create_all)
+        logger.info('Connecting to database ...')
+        try:
+            async with self.engine.begin() as conn:
+                await conn.run_sync(orm.Base.metadata.create_all)
+        except Exception:
+            logger.exception('Connecting to database failed\n\n---')
+            raise
+        logger.info('Connected to database')
 
     def extract_users(self, event: BaseModel) -> list[User]:
         users: list[User] = []
