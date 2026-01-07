@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from abc import ABCMeta
 import asyncio
+from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+import itertools
+from typing import TYPE_CHECKING, Iterable
 
+from aiogram import Bot
+from aiogram.methods import GetUpdates
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -44,7 +48,7 @@ class Singleton(ABCMeta):
 
 class Cache(metaclass=Singleton):
     users: dict[int, UserConfig] = {}
-    locks: dict[str, asyncio.Lock] = {"save_users_lock": asyncio.Lock()}
+    locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 class Database(metaclass=Singleton):
@@ -54,22 +58,53 @@ class Database(metaclass=Singleton):
         self.cache = Cache()
 
         dp.startup.register(self.startup)
+        dp.startup.register(self.handle_offline_updates)
         dp.update.outer_middleware.register(self.outer_middleware)  # pyright: ignore[reportArgumentType]
-        dp.update.register(self.save_user_handler)
+        dp.update.register(self.save_users_handler)
 
         registered = dp.update.handlers[-1]
         dp.update.handlers.pop(-1)
         dp.update.handlers.insert(0, registered)
 
     async def startup(self):
-        logger.info('Connecting to database ...')
+        logger.info("Connecting to database ...")
         try:
-            async with self.engine.begin() as conn:
-                await conn.run_sync(orm.Base.metadata.create_all)
+            async with self.engine.begin():
+                pass
         except Exception:
-            logger.exception('Connecting to database failed\n\n---')
+            logger.exception("Connecting to database failed\n\n---")
             raise
-        logger.info('Connected to database')
+        logger.info("Connected to database")
+
+    async def handle_offline_updates(self, bots: list[Bot], db: Database):
+        try:
+            async with asyncio.timeout(15):
+                await self._handle_offline_updates(bots, db)
+        except Exception:
+            logger.exception("Error while handle offline updates")
+        finally:
+            for bot in bots:
+                await bot.delete_webhook(drop_pending_updates=True)
+
+    async def _handle_offline_updates(self, bots: list[Bot], db: Database):
+        offline_updates: list[Update] = []
+
+        for bot in bots:
+            while True:
+                req = GetUpdates()
+                offline_updates += await bot(req)
+                if not offline_updates:
+                    break
+                if len(offline_updates) < 100:
+                    break
+
+                req.offset = offline_updates[-1].update_id + 1
+
+        if offline_updates:
+            await db.save_users(offline_updates)
+            logger.info(f"Handled {len(offline_updates)} offline updates")
+        else:
+            logger.info("No offline updates")
 
     def extract_users(self, event: BaseModel) -> list[User]:
         users: list[User] = []
@@ -93,9 +128,6 @@ class Database(metaclass=Singleton):
             return self.cache.users[user_id]
 
         lock_key = f"user:{user_id}"
-        if lock_key not in self.cache.locks:
-            self.cache.locks[lock_key] = asyncio.Lock()
-
         async with self.cache.locks[lock_key], self.sessionmaker() as session:
             stmt = select(orm.UserConfig).where(orm.UserConfig.user_id == user_id)
             if orm_user := await session.scalar(stmt):
@@ -103,32 +135,36 @@ class Database(metaclass=Singleton):
             else:
                 user_config = UserConfig(user_id=user_id)
             self.cache.users[user_id] = user_config
-            self.cache.locks.pop(lock_key, None)
 
         return self.cache.users[user_id]
 
-    async def save_user_handler(self, update: Update):
-        async def handler(self: Database, update: Update):
-            async with self.cache.locks["save_users_lock"]:
-                try:
-                    users = self.extract_users(update.event)
-                    if not users:
-                        return
+    async def save_users(
+        self, events: Iterable[BaseModel] | BaseModel, delay: bool = True
+    ):
+        async with self.cache.locks["save_users_lock"]:
+            if isinstance(events, BaseModel):
+                events = (events,)
 
-                    async with self.begin() as session:
-                        for user in users:
-                            user_config = await self.get_user(user.id)
-                            user_config.first_name = user.first_name
-                            user_config.last_name = user.last_name
-                            user_config.username = user.username
-                            await session.merge(orm.UserConfig.from_model(user_config))
-                            logger.info(f"saved user {user.id}:{user.full_name}")
-                except Exception:
-                    logger.exception("Save user error")
-                finally:
+            users = list(itertools.chain(*map(self.extract_users, events)))
+            if not users:
+                return
+            try:
+                async with self.begin() as session:
+                    for user in users:
+                        user_config = await self.get_user(user.id)
+                        user_config.first_name = user.first_name
+                        user_config.last_name = user.last_name
+                        user_config.username = user.username
+                        await session.merge(orm.UserConfig.from_model(user_config))
+                        logger.info(f"saved user {user.id}:{user.full_name}")
+            except Exception:
+                logger.exception("Save user error")
+            finally:
+                if delay:
                     await asyncio.sleep(0.5)
 
-        task = asyncio.create_task(handler(self, update))
+    async def save_users_handler(self, update: Update):
+        task = asyncio.create_task(self.save_users(update))
         dp._handle_update_tasks.add(task)
         task.add_done_callback(dp._handle_update_tasks.discard)
         skip()
@@ -138,13 +174,3 @@ class Database(metaclass=Singleton):
         if ctx and ctx.user_id:
             data["user_config"] = await self.get_user(ctx.user_id)
         return await handler(event, data)
-
-    async def save(self, obj: UserConfig | UserConfig):
-        if isinstance(obj, UserConfig):
-            if obj is not self.cache.users.get(obj.user_id):
-                self.cache.users[obj.user_id] = obj
-        else:
-            raise
-
-        async with self.begin() as session:
-            await session.merge(orm.UserConfig.from_model(obj))

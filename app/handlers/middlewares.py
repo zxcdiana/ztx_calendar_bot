@@ -7,7 +7,8 @@ from aiogram.dispatcher.middlewares.data import MiddlewareData as _MiddlewareDat
 import uvloop
 
 from app import utils
-from app.main import AppConfig, dp, main_router
+from app.config import AppConfig
+from app.main import dp, main_router
 from app.database.database import Singleton
 
 if TYPE_CHECKING:

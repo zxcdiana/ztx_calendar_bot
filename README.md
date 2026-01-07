@@ -1,47 +1,37 @@
 
-# Installation
-1. Create `.env` file (see: `.env.example`)
-2. Run bot:
+# Linux Installation
+1. Create `.env` file and fill `BOT_TOKEN`, `OWNERS` and `POSTGRES_URL` fields
+2. Init database:
+```bash
+uv run alembic upgrade head
+```
+3. Run bot:
 ```bash
 uv run -m app
 ```
 
+------------
+
 # Docker installation
-1. Make step 1 from the **Installation** block
-2. Build image:
-```bash
-docker build -t ztx_calendar_bot .
-```
-3. Create and run container:
-```bash
-docker run \
-    --env-file=".env" \
-    --name="calendar_bot" \
-    --restart=unless-stopped \
-    -d \
-    ztx_calendar_bot
-```
-4. Check logs:
-```bash
-docker logs -f calendar_bot
-```
-<details>
-    <summary>Steps 2, 3, 4 in one-command</summary>
+1. Create `.env` file and fill `BOT_TOKEN` and `OWNERS` fields
 
+### With make:
 ```bash
-docker build -t ztx_calendar_bot . && \
-echo Image builded
-docker run --env-file=".env" --name="calendar_bot" --restart=unless-stopped -d ztx_calendar_bot && \
-echo Container started && \
-docker logs -f calendar_bot
+make up
 ```
-</details>
 
-<details>
-    <summary>Uninstall</summary>
-
+### Without make:
 ```bash
-docker rm -f calendar_bot && \
-docker rmi ztx_calendar_bot
+docker compose run --rm bot uv run alembic upgrade head && \
+docker compose up -d && \
+docker compose logs -f
 ```
-</details>
+
+------------
+
+# `.env` file fields
+- BOT_TOKEN: `str` — Token of telegram bot
+
+- OWNERS: `list[int]` — Telegram user IDs of bot owners
+
+- POSTGRES_URL: `str` — URL to PostgreSQL database (format: `postgresql://<USER>:<PASSWORD>@<HOST>/<DATABASE>`)

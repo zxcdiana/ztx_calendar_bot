@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, field_serializer, field_validator
 import pytz
+
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from app.mood import _MoodMonthMixin, Mood, create_days_list
 
@@ -11,6 +12,12 @@ class UserConfig(BaseModel):
     username: str | None = None
     locale: str | None = None
     timezone: str | None = None
+    mood_notify: bool = False
+
+    @field_serializer("username", when_used="json")
+    def _dump_username(self, value: str | None):
+        if value is not None:
+            return value.lower()
 
     @property
     def tz(self):

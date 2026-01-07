@@ -1,17 +1,20 @@
 import uvloop
-
-from app.database import Database
-from app.scheduler import Scheduler
-from app.main import dp, bot, setup_logging
+import typer
 
 
-setup_logging()
+def main():
+    from app import database
+    from app.scheduler import Scheduler
+    from app.main import dp, bot, setup_logging
+    from app import handlers
+
+    database.register()
+    dp["db"] = database.Database()
+    dp["scheduler"] = Scheduler()
+    setup_logging()
+    handlers.register()
+
+    uvloop.run(dp.start_polling(bot))
 
 
-dp["db"] = Database()
-dp["scheduler"] = Scheduler()
-
-import app.handlers  # noqa: E402, F401
-
-
-uvloop.run(dp.start_polling(bot))
+typer.run(main)

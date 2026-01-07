@@ -25,10 +25,7 @@ from app.handlers.callback_data import (
 )
 from app.handlers.middlewares import MiddlewareData
 from app.i18n import I18nContext
-from app.mood import (
-    Mood,
-    date_to_dict,
-)
+from app.mood import Mood, date_to_dict
 from app.database import MoodMonth, orm
 from app.main import dp, mood_router
 

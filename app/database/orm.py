@@ -1,8 +1,14 @@
-from pydantic import BaseModel
-from sqlalchemy import JSON, BigInteger, Integer, String, inspect
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import JSON, BigInteger, Integer, String, inspect, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 
 class Base(DeclarativeBase, AsyncAttrs):
@@ -30,3 +36,4 @@ class UserConfig(Base, table="users"):
     username: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
     locale: Mapped[str | None] = mapped_column(String(2), nullable=True)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mood_notify: Mapped[bool] = mapped_column(server_default=text("false"))
