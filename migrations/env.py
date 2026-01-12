@@ -1,12 +1,13 @@
 from logging.config import fileConfig
+import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
 
-from app.config import app_cfg
-from app.database import orm
+from app.config import get_app_config
+from app._database.orm import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -21,13 +22,36 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = orm.Base.metadata
+target_metadata = Base.metadata
+
+
+def get_postgres_url():
+    x_args = context.get_x_argument(as_dictionary=True)
+    env_file = None
+
+    env_file_from_env = os.getenv('ALEMBIC_ENV_FILE')
+    env_file_from_args = x_args.get('env-file') or x_args.get('env_file') or x_args.get('ef')
+    url_from_env = os.getenv('ALEMBIC_URL')
+    url_from_args = x_args.get('url')
+
+    if env_file_from_args:
+        env_file = env_file_from_args
+    elif env_file_from_env:
+        env_file = env_file_from_env
+    elif url_from_args:
+        return url_from_args
+    elif url_from_env:
+        return url_from_env
+    
+    return get_app_config(env_file=env_file).get_db_uri(mode='sync')
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-config.set_main_option("sqlalchemy.url", app_cfg.get_db_uri(mode="sync"))
+config.set_main_option("sqlalchemy.url", get_postgres_url())
+
+
 
 
 def run_migrations_offline() -> None:
@@ -53,6 +77,11 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+def online_include_name(name, type_, parent_names):
+    match type_, name:
+        case 'table', 'apscheduler_jobs':
+            return False
+    return True
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
@@ -68,7 +97,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection, 
+            target_metadata=target_metadata, 
+            include_name=online_include_name
+        )
 
         with context.begin_transaction():
             context.run_migrations()

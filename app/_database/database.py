@@ -1,25 +1,27 @@
 from __future__ import annotations
 
-from abc import ABCMeta
+from typing import TYPE_CHECKING, Iterable
 import asyncio
+import itertools
+from abc import ABCMeta
 from collections import defaultdict
 from contextlib import asynccontextmanager
-import itertools
-from typing import TYPE_CHECKING, Iterable
+
+from pydantic import BaseModel
+
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from aiogram import Bot
 from aiogram.methods import GetUpdates
-from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-
-from aiogram.types import Update, User
+from aiogram.types import Message, Update, User
 from aiogram.dispatcher.event.bases import skip
 
 from app import utils
-from app.database.models import UserConfig
-from app.database import orm
-from app.main import app_cfg, dp
+from app.main import dp
+
+from app._database import orm
+from app._database.models import MoodConfig, MoodMonth, UserConfig, UserLastMessage
 
 
 if TYPE_CHECKING:
@@ -38,7 +40,7 @@ class Singleton(ABCMeta):
         def __init_wrapper__(*a, **kw):
             nonlocal is_initialized
             if is_initialized:
-                raise RuntimeError("Singleton already initialized")
+                raise RuntimeError(f"{cls.__name__} already initialized")
             is_initialized = True
             return raw_init(*a, **kw)
 
@@ -53,7 +55,7 @@ class Cache(metaclass=Singleton):
 
 class Database(metaclass=Singleton):
     def __init__(self) -> None:
-        self.engine = create_async_engine(app_cfg.get_db_uri(mode="async"))
+        self.engine = create_async_engine(dp["app_cfg"].get_db_uri(mode="async"))
         self.sessionmaker = async_sessionmaker(self.engine)
         self.cache = Cache()
 
@@ -61,7 +63,9 @@ class Database(metaclass=Singleton):
         dp.startup.register(self.handle_offline_updates)
         dp.update.outer_middleware.register(self.outer_middleware)  # pyright: ignore[reportArgumentType]
         dp.update.register(self.save_users_handler)
+        dp.message.register(self.save_last_message_handler)
 
+        # force update handler priority
         registered = dp.update.handlers[-1]
         dp.update.handlers.pop(-1)
         dp.update.handlers.insert(0, registered)
@@ -76,26 +80,66 @@ class Database(metaclass=Singleton):
             raise
         logger.info("Connected to database")
 
+    async def get_last_message(
+        self, chat_id: int, *, user_id: int, topic_id: int | None = None
+    ):
+        if topic_id is None:
+            topic_id = 0
+
+        async with self() as session:
+            stmt = (
+                sa.select(orm.UserLastMessage)
+                .where(orm.UserLastMessage.chat_id == chat_id)
+                .where(orm.UserLastMessage.user_id == user_id)
+                .where(orm.UserLastMessage.topic_id == topic_id)
+            )
+            if obj := await session.scalar(stmt):
+                return UserLastMessage.from_orm(obj)
+
+    async def save_last_message_handler(self, m: Message):
+        task = asyncio.create_task(self.save_last_message(m))
+        dp._handle_update_tasks.add(task)
+        task.add_done_callback(dp._handle_update_tasks.discard)
+        skip()
+
+    async def save_last_message(self, m: Message):
+        user = m.from_user
+        if user is None or m.chat.type == "private":
+            return
+
+        last_message = UserLastMessage(
+            user_id=user.id,
+            chat_id=m.chat.id,
+            topic_id=m.message_thread_id or 0,
+            message=m,
+        )
+        await last_message.merge()
+
     async def handle_offline_updates(self, bots: list[Bot], db: Database):
+        from app import main
+
+        if main.DEV_MODE:
+            return
         try:
             async with asyncio.timeout(15):
                 await self._handle_offline_updates(bots, db)
         except Exception:
             logger.exception("Error while handle offline updates")
-        finally:
-            for bot in bots:
-                await bot.delete_webhook(drop_pending_updates=True)
+
+        for bot in bots:
+            await bot.delete_webhook(drop_pending_updates=True)
 
     async def _handle_offline_updates(self, bots: list[Bot], db: Database):
         offline_updates: list[Update] = []
 
         for bot in bots:
+            req = GetUpdates()
             while True:
-                req = GetUpdates()
-                offline_updates += await bot(req)
-                if not offline_updates:
+                updates = await bot(req)
+                offline_updates += updates
+                if not updates:
                     break
-                if len(offline_updates) < 100:
+                if len(updates) < 100:
                     break
 
                 req.offset = offline_updates[-1].update_id + 1
@@ -120,7 +164,12 @@ class Database(metaclass=Singleton):
 
     @asynccontextmanager
     async def begin(self):
-        async with self.sessionmaker() as session, session.begin():
+        async with self() as session, session.begin():
+            yield session
+
+    @asynccontextmanager
+    async def __call__(self, **local_kw):
+        async with self.sessionmaker(**local_kw) as session:
             yield session
 
     async def get_user(self, user_id: int) -> UserConfig:
@@ -129,7 +178,7 @@ class Database(metaclass=Singleton):
 
         lock_key = f"user:{user_id}"
         async with self.cache.locks[lock_key], self.sessionmaker() as session:
-            stmt = select(orm.UserConfig).where(orm.UserConfig.user_id == user_id)
+            stmt = sa.select(orm.UserConfig).where(orm.UserConfig.user_id == user_id)
             if orm_user := await session.scalar(stmt):
                 user_config = UserConfig.model_validate(orm_user, from_attributes=True)
             else:
@@ -138,9 +187,33 @@ class Database(metaclass=Singleton):
 
         return self.cache.users[user_id]
 
-    async def save_users(
-        self, events: Iterable[BaseModel] | BaseModel, delay: bool = True
-    ):
+    async def get_mood_month(self, user_id: int, *, year: int, month: int):
+        async with self() as session:
+            stmt = (
+                sa.select(orm.MoodMonth)
+                .where(orm.MoodMonth.user_id == user_id)
+                .where(orm.MoodMonth.year == year)
+                .where(orm.MoodMonth.month == month)
+            )
+            if mood_month_orm := await session.scalar(stmt):
+                return MoodMonth.from_orm(mood_month_orm)
+
+            mood_month = MoodMonth(
+                user_id=user_id,
+                year=year,
+                month=month,
+            )
+            return mood_month
+
+    async def get_mood_config(self, user_id: int):
+        async with self() as session:
+            stmt = sa.select(orm.MoodConfig).where(orm.MoodConfig.user_id == user_id)
+            if cfg := await session.scalar(stmt):
+                return MoodConfig.from_orm(cfg)
+
+            return MoodConfig(user_id=user_id)
+
+    async def save_users(self, events: Iterable[BaseModel] | BaseModel):
         async with self.cache.locks["save_users_lock"]:
             if isinstance(events, BaseModel):
                 events = (events,)
@@ -155,13 +228,9 @@ class Database(metaclass=Singleton):
                         user_config.first_name = user.first_name
                         user_config.last_name = user.last_name
                         user_config.username = user.username
-                        await session.merge(orm.UserConfig.from_model(user_config))
-                        logger.info(f"saved user {user.id}:{user.full_name}")
+                        await session.merge(user_config.to_orm())
             except Exception:
-                logger.exception("Save user error")
-            finally:
-                if delay:
-                    await asyncio.sleep(0.5)
+                logger.exception("Save users error")
 
     async def save_users_handler(self, update: Update):
         task = asyncio.create_task(self.save_users(update))

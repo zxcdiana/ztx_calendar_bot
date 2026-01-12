@@ -39,6 +39,10 @@ def create_days_list(year: int, month: int) -> list[Mood]:
     return [Mood.UNSET] * days
 
 
+def create_days_notes_list(year: int, month: int) -> list[str | None]:
+    return [None] * days_in_month(date(year, month, 1))
+
+
 def days_in_month(date: date):
     return (date + relativedelta(months=1) - date).days
 

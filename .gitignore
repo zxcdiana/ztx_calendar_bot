@@ -1,3 +1,6 @@
+# telethon sessions
+*.session
+*.session-journal
 
 # https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 .vscode/*
@@ -161,7 +164,7 @@ activemq-data/
 *.sage.py
 
 # Environments
-.env
+*.env
 .envrc
 .venv
 env/

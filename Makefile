@@ -1,4 +1,4 @@
-.PHONY: unknown stub f up down build logs start stop restart
+.PHONY: unknown stub f up down build logs start stop restart purge reup
 
 unknown:
 	@echo "Unknown action. Exiting"
@@ -39,8 +39,11 @@ restart:
 	@$(MAKE) logs
 
 purge:
-	@docker compose down --rmi=all
+	@docker compose down --rmi=local
 
 reup:
 	@$(MAKE) purge
-	$(MAKE) up
+	@$(MAKE) up
+
+dev:
+	@uv run -m app --dev

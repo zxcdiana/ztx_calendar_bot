@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+from pathlib import Path
 import re
 from typing import Literal
 
-from pydantic import Secret, field_validator
+from pydantic import AliasChoices, Field, Secret, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppConfig(BaseSettings):
     owners: set[int]
     bot_token: Secret[str]
-    postgres_url: Secret[str]
+    api_id: Secret[int] | None = None
+    api_hash: Secret[str] | None = None
+    postgres_url: Secret[str] = Field(
+        validation_alias=AliasChoices("_compose_postgres_url")
+    )
     locale: Literal["ru"] = "ru"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", frozen=True)
+    model_config = SettingsConfigDict(
+        extra="ignore", frozen=True, populate_by_name=True
+    )
 
     @field_validator("postgres_url", mode="after")
     @classmethod
@@ -39,4 +46,7 @@ class AppConfig(BaseSettings):
             raise ValueError(f"invalid mode: {mode}")
 
 
-app_cfg = AppConfig.model_validate({})
+def get_app_config(*, env_file: str | Path | None = None):
+    if env_file is None:
+        env_file = ".env"
+    return AppConfig(_env_file=env_file)  # pyright: ignore[reportCallIssue]

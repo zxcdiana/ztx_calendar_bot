@@ -10,7 +10,8 @@
             "type": "debugpy",
             "request": "launch",
             "module": "app",
-            "justMyCode": false
+            "args": ["--dev"],
+            "justMyCode": false,
         }
     ]
 }

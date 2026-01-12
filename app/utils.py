@@ -1,8 +1,11 @@
+from __future__ import annotations
+
+import datetime
 import html
 import inspect
 import logging
 from typing import Awaitable, Iterable
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, Chat
 
 
 __all__ = (
@@ -47,3 +50,25 @@ def split_event(
         return event.message, event  # pyright: ignore[reportReturnType]
     else:
         return event, None
+
+
+def chat_url(chat: Chat):
+    is_private = chat.type == "private"
+    if chat.username:
+        url = f"https://t.me/{chat.username}"
+    elif is_private:
+        url = f"tg://openmessage?user_id={chat.id}"
+    else:
+        chat_id = str(chat.id).removeprefix("-100")
+        url = f"https://t.me/c/{chat_id}"
+
+    return url
+
+
+def chat_text_url(chat: Chat):
+    return f'<a href="{chat_url(chat)}">{escape_html(chat.full_name)}</a>'
+
+
+def time_emoji(time_obj: datetime.time):
+    emojis = ["🕛"] + list("🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛")
+    return emojis[time_obj.hour if time_obj.hour < 12 else time_obj.hour - 12]

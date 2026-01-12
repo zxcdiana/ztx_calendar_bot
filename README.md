@@ -1,5 +1,5 @@
 
-# Linux Installation
+# Linux Installation (using [uv](https://docs.astral.sh/uv/getting-started/installation/))
 1. Create `.env` file and fill `BOT_TOKEN`, `OWNERS` and `POSTGRES_URL` fields
 2. Init database:
 ```bash

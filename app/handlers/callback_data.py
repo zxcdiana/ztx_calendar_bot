@@ -1,7 +1,7 @@
 from typing import Any, Literal, Self
 
 from aiogram.filters.callback_data import CallbackData as _CallbackData
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton
 
 from magic_filter import MagicFilter
 
@@ -14,18 +14,21 @@ from app.handlers.filters import ctx_and_f
 class CallbackData(_CallbackData, prefix="*"):
     def __init_subclass__(cls, **kwargs: Any) -> None:
         if "prefix" not in kwargs:
-            kwargs["prefix"] = cls.__name__.lower()
+            kwargs["prefix"] = "".join(
+                filter(lambda x: x not in "aeiou", cls.__name__.lower())
+            )
 
         return super().__init_subclass__(**kwargs)
 
     @classmethod
     def merge(cls, obj: CallbackData, **args):
-        return cls.model_validate(
-            {**obj.model_dump(mode="json"), **args}, extra="ignore"
-        )
+        return cls.model_validate({**obj.model_dump(), **args}, extra="ignore")
+
+    def update(self, **args):
+        return self.model_validate({**self.model_dump(), **args}, extra="ignore")
 
 
-class OwnedCallbackData(CallbackData):
+class OwnedCallbackData(CallbackData, prefix="*"):
     user_id: int
 
     @classmethod
@@ -46,7 +49,7 @@ class OwnedCallbackData(CallbackData):
 
     @classmethod
     def filter(cls, rule: MagicFilter | None = None):  # type: ignore
-        return ctx_and_f(super().filter(rule), cls._users_filter)
+        return ctx_and_f(super().filter(rule=rule), cls._users_filter)
 
 
 class EmptyCallbackData(CallbackData):
@@ -65,13 +68,38 @@ class MoodMonthCallback(OwnedCallbackData, _MoodMonthMixin):
     """`-1`: disable, `0-6`: mark day"""
 
 
-class OpenMoodDay(MoodMonthCallback, _MoodMonthMixin):
+class OpenMoodDay(MoodMonthCallback):
     day: int
 
 
 class MarkMoodDay(OpenMoodDay):
     value: int
-    go_to: Literal["day", "month"]
+    go_to: Literal["day", "month", "from_notify"]
+
+
+class MoodDayNote(OpenMoodDay):
+    action: Literal["edit", "extend", "delete-warning", "delete"]
+
+
+class MoodNotifySetTime(OwnedCallbackData, sep="|"):
+    time: str
+    """`00:00`"""
+
+
+class MoodNotifySwitchState(OwnedCallbackData):
+    pass
+
+
+class MoodNotifySetChat(OwnedCallbackData):
+    chat_id: int | None = None
+
+
+class MoodNotifyChoiceTime(OwnedCallbackData):
+    pass
 
 
 empty_callback_data = EmptyCallbackData()
+
+
+def empty_button(text: str = "\xad"):
+    return InlineKeyboardButton(text=text, callback_data=empty_callback_data.pack())

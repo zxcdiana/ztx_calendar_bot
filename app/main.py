@@ -1,19 +1,23 @@
+# pyright: reportIncompatibleMethodOverride=false
+
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
 import logging
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 
-from aiogram import Bot, Dispatcher, Router
-from aiogram.client.default import DefaultBotProperties
+import aiogram
+from aiogram import Bot, Router
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.types import BotCommandScopeDefault, BotCommand
 from aiogram.methods import SetMyCommands
+from telethon import TelegramClient
 
 from app import utils
-from app.config import app_cfg
 from app.i18n import FluentRuntimeCore, I18nMiddleware, I18nMiddlewareManager
+from app.telethon_session import AsyncSQLiteSession
 
 
 logger = utils.get_logger()
@@ -22,24 +26,47 @@ logger = utils.get_logger()
 APP_DIR = Path(__file__).parent.parent
 LOCALES_DIR = APP_DIR / "locales/"
 
+DEV_MODE: bool
+
+# fmt: off
+if TYPE_CHECKING:
+    from app.config import AppConfig
+    from app.i18n import I18nMiddleware
+    from app.database import Database
+    from app.scheduler import Scheduler
+    from app.handlers.middlewares import AntiFlood
+    from uvloop import Loop
+
+    class Dispatcher(aiogram.Dispatcher):
+        @overload
+        def __getitem__(self, key: Literal['app_cfg']) -> AppConfig: ...
+        @overload
+        def __getitem__(self, key: Literal['main_bot']) -> Bot: ...
+        @overload
+        def __getitem__(self, key: Literal['i18n_middleware']) -> I18nMiddleware: ...
+        @overload
+        def __getitem__(self, key: Literal['db']) -> Database: ...
+        @overload
+        def __getitem__(self, key: Literal['scheduler']) -> Scheduler: ...
+        @overload
+        def __getitem__(self, key: Literal['anti_flood_mw']) -> AntiFlood: ...
+        @overload
+        def __getitem__(self, key: Literal['loop']) -> Loop: ...
+        def __getitem__(self, key: Any) -> Any: ...
+        @overload
+        def get(self, key: Literal['tl_bot']) -> TelegramClient: ...
+        @overload
+        def get(self, key: Any) -> Any: ...
+        def get(self, key: Any) -> Any: ...
+else:
+    Dispatcher = aiogram.Dispatcher
+# fmt: on
 
 dp = Dispatcher(events_isolation=SimpleEventIsolation())
 main_router = dp.include_router(Router())
 commands_router = main_router.include_router(Router())
 mood_router = commands_router.include_router(Router())
 admin_router = commands_router.include_router(Router())
-
-
-dp["app_cfg"] = app_cfg
-bot = Bot(
-    token=app_cfg.bot_token.get_secret_value(),
-    default=DefaultBotProperties(
-        parse_mode="html",
-        allow_sending_without_reply=True,
-        disable_notification=True,
-        link_preview_prefer_small_media=True,
-    ),
-)
 
 
 def setup_logging():
@@ -74,12 +101,20 @@ def get_my_commands() -> list[SetMyCommands]:
                         command=cmd,
                         description=core.get(f"bot_command-{cmd}", language_code),
                     )
-                    for cmd in ["mood"]
+                    for cmd in ["mood", "notify"]
                 ],
             )
         )
 
     return result
+
+
+def get_owner_commands() -> list[BotCommand]:
+    i18n: I18nMiddleware = dp["i18n_middleware"]
+    return [
+        BotCommand(command=cmd, description=i18n.core.get(f"bot_command-{cmd}"))
+        for cmd in ("eval",)
+    ]
 
 
 @dp.startup()
@@ -91,3 +126,28 @@ async def get_loop(dispatcher):
 async def set_my_commands(bot: Bot):
     for commands in get_my_commands():
         asyncio.create_task(bot(commands))
+
+
+@dp.startup()
+async def create_telethon_client(dispatcher: Dispatcher, app_cfg: AppConfig):
+    if app_cfg.api_id is None or app_cfg.api_hash is None:
+        return
+    client = TelegramClient(
+        AsyncSQLiteSession(
+            f"bot_{app_cfg.bot_token.get_secret_value().split(':')[0]}.session"
+        ),
+        api_id=app_cfg.api_id.get_secret_value(),
+        api_hash=app_cfg.api_hash.get_secret_value(),
+    )
+    try:
+        async with asyncio.timeout(30):
+            await client.start(  # type: ignore
+                bot_token=app_cfg.bot_token.get_secret_value()
+            )
+            assert await client.get_me()
+    except Exception:
+        await utils.suppress_error(client.disconnect())  # type: ignore
+        logger.exception("telethon client not loaded")
+        return
+    else:
+        dispatcher["tl_bot"] = client

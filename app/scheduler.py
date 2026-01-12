@@ -7,8 +7,8 @@ from typing import Callable
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
-from app.database.database import Singleton
-from app.main import dp, app_cfg
+from app._database.database import Singleton
+from app.main import dp
 
 
 def wrap[T](fn: Callable[..., T]) -> Callable[..., CoroutineType[None, None, T]]:
@@ -23,7 +23,7 @@ class Scheduler(AsyncIOScheduler, metaclass=Singleton):
     def __init__(self):
         super().__init__(timezone=UTC)
 
-        self.jobstore = SQLAlchemyJobStore(app_cfg.get_db_uri(mode="sync"))
+        self.jobstore = SQLAlchemyJobStore(dp["app_cfg"].get_db_uri(mode="sync"))
         self.add_jobstore(self.jobstore)
         dp.startup.register(wrap(self.start))
         dp.shutdown.register(wrap(self.shutdown))
