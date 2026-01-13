@@ -12,6 +12,7 @@
             "module": "app",
             "args": ["--dev"],
             "justMyCode": false,
+            "envFile": ".dev.env",
         }
     ]
 }

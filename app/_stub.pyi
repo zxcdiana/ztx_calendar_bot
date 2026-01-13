@@ -198,6 +198,48 @@ class I18nStub:
         ...
 
     @staticmethod
+    def loading(**kwargs: Any) -> Literal['Загрузка...']:
+        ...
+
+    class __Gender:
+
+        @staticmethod
+        def male(**kwargs: Any) -> Literal['🙍\u200d♂️ Мужской']:
+            ...
+
+        @staticmethod
+        def female(**kwargs: Any) -> Literal['🙇\u200d♀️ Женский']:
+            ...
+
+        @staticmethod
+        def male_button(**kwargs: Any) -> Literal['Пол: { gender-male }']:
+            ...
+
+        @staticmethod
+        def female_button(**kwargs: Any) -> Literal['Пол: { gender-female }']:
+            ...
+
+        @staticmethod
+        def changed(**kwargs: Any) -> Literal['Пол сохранен']:
+            ...
+    gender = __Gender()
+
+    class __TzCommand:
+
+        @staticmethod
+        def info(*, time_emoji: Any, date_time: Any, command: Any, **kwargs: Any) -> Literal['<b>Твоё время:</b>']:
+            ...
+
+        @staticmethod
+        def changed(*, time_emoji: Any, date_time: Any, **kwargs: Any) -> Literal['✅ Время установлено!']:
+            ...
+
+        @staticmethod
+        def timezone404(*, query: Any, **kwargs: Any) -> Literal['✖️ Не удалось найти локацию по запросу «<code>{ $query }</code>»']:
+            ...
+    tz_command = __TzCommand()
+
+    @staticmethod
     def month_1(**kwargs: Any) -> Literal['Январь']:
         ...
 

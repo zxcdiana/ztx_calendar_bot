@@ -12,6 +12,7 @@ from app.main import dp, setup_logging
 from app.config import get_app_config
 from app.database import Database
 from app.scheduler import Scheduler
+from app.geo import Geolocator
 
 
 def run_app(
@@ -38,6 +39,7 @@ def run_app(
 
     dp["db"] = Database()
     dp["scheduler"] = Scheduler()
+    dp["geo"] = Geolocator()
 
     handlers.register()
 

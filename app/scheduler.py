@@ -7,7 +7,7 @@ from typing import Callable
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
-from app._database.database import Singleton
+from app.utils import Singleton
 from app.main import dp
 
 

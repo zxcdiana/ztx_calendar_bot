@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Iterable
 import asyncio
 import itertools
-from abc import ABCMeta
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
@@ -19,6 +18,7 @@ from aiogram.dispatcher.event.bases import skip
 
 from app import utils
 from app.main import dp
+from app.utils import Singleton
 
 from app._database import orm
 from app._database.models import MoodConfig, MoodMonth, UserConfig, UserLastMessage
@@ -29,23 +29,6 @@ if TYPE_CHECKING:
 
 
 logger = utils.get_logger()
-
-
-class Singleton(ABCMeta):
-    def __new__(mcls, name, bases, namespace, /, **kwargs):
-        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
-        raw_init = cls.__init__
-        is_initialized = False
-
-        def __init_wrapper__(*a, **kw):
-            nonlocal is_initialized
-            if is_initialized:
-                raise RuntimeError(f"{cls.__name__} already initialized")
-            is_initialized = True
-            return raw_init(*a, **kw)
-
-        cls.__init__ = __init_wrapper__
-        return cls
 
 
 class Cache(metaclass=Singleton):

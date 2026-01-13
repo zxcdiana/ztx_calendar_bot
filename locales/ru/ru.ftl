@@ -1,8 +1,7 @@
 bot_command-mood = Календарь настроения
 bot_command-notify = Уведомления
-
-
-
+bot_command-tz = Установить время
+bot_command-start = /start
 
 error-button_wrong_user = Не твоя кнопка
 
@@ -110,6 +109,7 @@ turn_off = Выключить
 change = сменить
 send_here = Отправлять в этот чат
 send_pm = Отправлять в ЛС
+loading = Загрузка...
 
 
 mood_notify-select_time =
@@ -122,7 +122,26 @@ mood_notify-notification =
     <tg-emoji emoji-id="5431897022456145283">📆</tg-emoji> <b>{ $dmy }, { $weekday }</b>
 
 
+gender-male = 🙍‍♂️ Мужской
+gender-female = 🙇‍♀️ Женский
 
+gender-male_button = Пол: { gender-male }
+gender-female_button = Пол: { gender-female }
+gender-changed = Пол сохранен
+
+tz_command-info =
+    <b>Время у тебя:</b>
+    { $time_emoji } <code>{ $date_time }</code>
+
+    Для смены времени введи:
+    &gt; <code>{ $command } город</code>
+
+tz_command-changed =
+     Время установлено!
+    { $time_emoji } <code>{ $date_time }</code>
+
+tz_command-timezone404 =
+    <tg-emoji emoji-id='5465665476971471368'>❌</tg-emoji> Не удалось найти локацию по запросу «<code>{ $query }</code>»
 
 month_1 = Январь
 month_2 = Февраль

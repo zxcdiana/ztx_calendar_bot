@@ -13,7 +13,7 @@ from typing import (
 
 import datetime
 import warnings
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from types import get_original_bases
 
 from pydantic import (
@@ -38,6 +38,7 @@ warnings.filterwarnings("ignore", category=GenericBeforeBaseModelWarning)
 
 
 T = TypeVar("T", bound=orm.Base)
+logger = utils.get_logger()
 
 
 class DatabaseMixin(Generic[T], BaseModel):
@@ -86,6 +87,17 @@ class UserConfig(DatabaseMixin[orm.UserConfig]):
         if value is not None:
             return value.lower()
 
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, value: str | None):
+        if value is not None:
+            try:
+                ZoneInfo(value)
+            except ZoneInfoNotFoundError:
+                logger.exception(f"{value=}")
+                value = None
+        return value
+
     @property
     def name(self, html: bool = True):
         name = (
@@ -111,7 +123,11 @@ class UserConfig(DatabaseMixin[orm.UserConfig]):
 
     @property
     def tz(self):
-        return ZoneInfo(self.timezone or "Asia/Almaty")
+        return ZoneInfo(self.timezone or "Europe/Kyiv")
+
+    @property
+    def datetime(self):
+        return datetime.datetime.now(self.tz)
 
     @property
     def lang_code(self) -> str:

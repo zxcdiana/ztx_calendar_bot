@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import datetime
+from abc import ABCMeta
+from typing import Awaitable, Iterable
 import html
 import inspect
 import logging
-from typing import Awaitable, Iterable
+import datetime
+
 from aiogram.types import Message, CallbackQuery, Chat
 
 
@@ -15,6 +17,23 @@ __all__ = (
     "escape_html",
     "split_event",
 )
+
+
+class Singleton(ABCMeta):
+    def __new__(mcls, name, bases, namespace, /, **kwargs):
+        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+        raw_init = cls.__init__
+        is_initialized = False
+
+        def __init_wrapper__(*a, **kw):
+            nonlocal is_initialized
+            if is_initialized:
+                raise RuntimeError(f"{cls.__name__} already initialized")
+            is_initialized = True
+            return raw_init(*a, **kw)
+
+        cls.__init__ = __init_wrapper__
+        return cls
 
 
 def get_logger(name: str | None = None) -> logging.Logger:
@@ -43,6 +62,19 @@ def escape_html(s: str) -> str:
     return html.escape(s, quote=False)
 
 
+def utc_offset(date: datetime.datetime):
+    delta = date.utcoffset()
+    assert delta is not None
+    hours, minutes = map(int, divmod(delta.total_seconds() / 60, 60))
+    result = f"{'+' if hours >= 0 else ''}{hours}"
+    if minutes:
+        minutes = str(minutes)
+        if len(minutes) == 1:
+            minutes = f"0{minutes}"
+        result += f":{minutes}"
+    return result
+
+
 def split_event(
     event: Message | CallbackQuery,
 ) -> tuple[Message, CallbackQuery | None]:
@@ -69,6 +101,6 @@ def chat_text_url(chat: Chat):
     return f'<a href="{chat_url(chat)}">{escape_html(chat.full_name)}</a>'
 
 
-def time_emoji(time_obj: datetime.time):
+def time_emoji(time_obj: datetime.time | datetime.datetime):
     emojis = ["🕛"] + list("🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛")
     return emojis[time_obj.hour if time_obj.hour < 12 else time_obj.hour - 12]

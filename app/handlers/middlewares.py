@@ -9,7 +9,7 @@ from aiogram.dispatcher.middlewares.data import MiddlewareData as _MiddlewareDat
 from app import utils
 from app.main import dp, main_router
 from app.config import AppConfig
-from app._database.database import Singleton
+from app.utils import Singleton
 
 if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from app.i18n import I18nContext, I18nMiddleware
     from app.database import Database, UserConfig, MoodConfig
     from app.scheduler import Scheduler
+    from app.geo import Geolocator
 
 
 logger = utils.get_logger()
@@ -26,6 +27,7 @@ logger = utils.get_logger()
 class MiddlewareData(_MiddlewareData):
     db: Database
     scheduler: Scheduler
+    geo: Geolocator
     app_cfg: AppConfig
     mood_cfg: MoodConfig
     user_config: UserConfig

@@ -10,12 +10,14 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 
 import aiogram
 from aiogram import Bot, Router
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.types import BotCommandScopeDefault, BotCommand
 from aiogram.methods import SetMyCommands
 from telethon import TelegramClient
 
 from app import utils
+from app.geo import asynccontextmanager
 from app.i18n import FluentRuntimeCore, I18nMiddleware, I18nMiddlewareManager
 from app.telethon_session import AsyncSQLiteSession
 
@@ -34,6 +36,7 @@ if TYPE_CHECKING:
     from app.i18n import I18nMiddleware
     from app.database import Database
     from app.scheduler import Scheduler
+    from app.geo import Geolocator
     from app.handlers.middlewares import AntiFlood
     from uvloop import Loop
 
@@ -49,6 +52,8 @@ if TYPE_CHECKING:
         @overload
         def __getitem__(self, key: Literal['scheduler']) -> Scheduler: ...
         @overload
+        def __getitem__(self, key: Literal['geo']) -> Geolocator: ...
+        @overload
         def __getitem__(self, key: Literal['anti_flood_mw']) -> AntiFlood: ...
         @overload
         def __getitem__(self, key: Literal['loop']) -> Loop: ...
@@ -62,7 +67,22 @@ else:
     Dispatcher = aiogram.Dispatcher
 # fmt: on
 
-dp = Dispatcher(events_isolation=SimpleEventIsolation())
+
+class ConcurrentEventError(Exception):
+    pass
+
+
+class EventIsolation(SimpleEventIsolation):
+    @asynccontextmanager
+    async def lock(self, key: StorageKey):
+        lock = self._locks[key]
+        if lock.locked():
+            raise ConcurrentEventError()
+        async with lock:
+            yield
+
+
+dp = Dispatcher(events_isolation=EventIsolation())
 main_router = dp.include_router(Router())
 commands_router = main_router.include_router(Router())
 mood_router = commands_router.include_router(Router())
@@ -101,7 +121,7 @@ def get_my_commands() -> list[SetMyCommands]:
                         command=cmd,
                         description=core.get(f"bot_command-{cmd}", language_code),
                     )
-                    for cmd in ["mood", "notify"]
+                    for cmd in ["start", "mood", "notify", "tz"]
                 ],
             )
         )
@@ -151,3 +171,16 @@ async def create_telethon_client(dispatcher: Dispatcher, app_cfg: AppConfig):
         return
     else:
         dispatcher["tl_bot"] = client
+
+
+@dp.update.outer_middleware
+async def suppress_concurrent_event_error(handler, event, data):
+    try:
+        return await handler(event, data)
+    except ConcurrentEventError:
+        pass
+
+
+dp.update.outer_middleware._middlewares.insert(
+    0, dp.update.outer_middleware._middlewares.pop(-1)
+)

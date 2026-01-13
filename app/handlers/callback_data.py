@@ -98,6 +98,14 @@ class MoodNotifyChoiceTime(OwnedCallbackData):
     pass
 
 
+class UserConfigCallback(OwnedCallbackData):
+    pass
+
+
+class UserConfigSwitchGender(UserConfigCallback):
+    pass
+
+
 empty_callback_data = EmptyCallbackData()
 
 

@@ -615,10 +615,12 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         chat_name = utils.chat_text_url(chat) if chat else "pm"
         cd_ctx = OwnedCallbackData(user_id=data["user_config"].user_id)
         i18n = data["i18n"]
+        utc_offset = utils.utc_offset(data["user_config"].datetime)
 
         if cfg.notify_state:
             text = data["i18n"].mood_notify.enabled(
-                chat=chat_name, time=cfg.notify_time_str
+                chat=chat_name,
+                time=f"{cfg.notify_time_str} <code>({utc_offset})</code>",
             )
             kb = [
                 [
