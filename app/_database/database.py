@@ -93,7 +93,7 @@ class Database(metaclass=Singleton):
         last_message = UserLastMessage(
             user_id=user.id,
             chat_id=m.chat.id,
-            topic_id=m.message_thread_id or 0,
+            topic_id=utils.get_topic_id(m) or 0,
             message=m,
         )
         await last_message.merge()

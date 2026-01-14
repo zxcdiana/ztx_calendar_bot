@@ -205,6 +205,7 @@ class MoodConfig(DatabaseMixin[orm.MoodConfig]):
     notify_chat_id: int | None = None
     notify_chat_topic_id: int | None = None
     notify_time: datetime.time = Field(default_factory=datetime.time)
+    notify_current_day: bool = False
 
     def notify_reset(self):
         fields = self.__pydantic_fields__
@@ -214,6 +215,7 @@ class MoodConfig(DatabaseMixin[orm.MoodConfig]):
             "notify_chat_id",
             "notify_chat_topic_id",
             "notify_time",
+            "notify_current_day",
         ):
             setattr(
                 self,
@@ -244,3 +246,17 @@ class UserLastMessage(DatabaseMixin[orm.UserLastMessage]):
     chat_id: int
     topic_id: Literal[0] | int = 0
     message: Message
+
+    @field_serializer("message", when_used="always")
+    @classmethod
+    def _dump_message(cls, m: Message):
+        return m.model_dump(
+            include={
+                "message_id",
+                "date",
+                "chat",
+                "message_thread_id",
+                "is_topic_message",
+            },
+            exclude_none=True,
+        )

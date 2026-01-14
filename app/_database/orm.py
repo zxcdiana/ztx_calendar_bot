@@ -37,7 +37,7 @@ class Base(DeclarativeBase, AsyncAttrs):
 
     @classmethod
     def from_model(cls, obj: BaseModel) -> Self:
-        data = obj.model_dump(include=cls.columns, exclude_none=True)
+        data = obj.model_dump(include=cls.columns)
         return cls(**data)
 
 
@@ -65,6 +65,7 @@ class MoodConfig(Base, table="mood_config"):
     notify_chat_id: Mapped[int | None] = column(BigInteger, nullable=True)
     notify_chat_topic_id: Mapped[int | None] = column(BigInteger, nullable=True)
     notify_time: Mapped[datetime.time] = column(Time, server_default=sa.text("'00:00'"))
+    notify_current_day: Mapped[bool] = column(server_default=sa.text("false"))
 
 
 class UserLastMessage(Base, table="user_last_message"):

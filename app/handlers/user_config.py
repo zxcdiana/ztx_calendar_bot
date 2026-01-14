@@ -124,7 +124,9 @@ async def set_timezone(
 
     if timezone is None:
         await loading.edit_text(
-            text=i18n.tz_command.timezone404(query=geo.normalize_query(command.args))
+            text=i18n.tz_command.timezone404(
+                query=geo.normalize_query(command.args) or ""
+            )
             or ""
         )
         return

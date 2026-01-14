@@ -44,6 +44,7 @@ from app.handlers.callback_data import (
     MoodNotifyChoiceTime,
     MoodNotifySetChat,
     MoodNotifySetTime,
+    MoodNotifySwitchDayType,
     MoodNotifySwitchState,
     OpenMoodDay,
     MoodMonthCallback,
@@ -80,7 +81,9 @@ class MoodMonthHandler(Handler[Message | CallbackQuery]):
         )
         mark = cd.marker
         text = data["i18n"].mood_month(
-            year=str(cd.year), month=cls.str_month(data["i18n"], month=cd.month)
+            year=str(cd.year),
+            month=cls.str_month(data["i18n"], month=cd.month),
+            current_dmy=data["user_config"].datetime.strftime(r"%d.%m.%y"),
         )
         kb: list[list[InlineKeyboardButton]] = [
             *utils.chunks(
@@ -153,7 +156,7 @@ class MoodMonthHandler(Handler[Message | CallbackQuery]):
     async def handle(self) -> Any:
         m, call = utils.split_event(self.event)
         if not call:
-            user_date = datetime.datetime.now(self.data["user_config"].tz)
+            user_date = self.data["user_config"].datetime
             self.data["callback_data"] = MoodMonthCallback(
                 user_id=self.event.from_user.id,
                 year=user_date.year,
@@ -206,7 +209,12 @@ class MoodDayHandler(Handler[CallbackQuery]):
         mood_router.message.register(
             cls.edit_note_handler,
             F.html_text,
-            StateFilter(input_state.EDIT_NOTE, input_state.EXTEND_NOTE),
+            or_f(
+                StateFilter(input_state.EDIT_NOTE, input_state.EXTEND_NOTE),
+                F.cast(
+                    MoodNotifyConfigurator.is_replied_to_notify_job_panel_filter
+                ).as_("notify_callback_data"),
+            ),
             flags=dict(UNIQE_STATE=True),
         )
 
@@ -216,23 +224,37 @@ class MoodDayHandler(Handler[CallbackQuery]):
         await state.update_data(edit_note=None)
 
     @classmethod
-    async def edit_note_handler(cls, m: Message, **data: Unpack[MiddlewareData]):
+    async def edit_note_handler(
+        cls,
+        m: Message,
+        notify_callback_data: MarkMoodDay | None = None,
+        **data: Unpack[MiddlewareData],
+    ):
         i18n = data["i18n"]
+        edit_note_data = await data["state"].get_value("edit_note")
+        assert edit_note_data or notify_callback_data
 
-        input_data = InputNoteContext.model_validate(
-            await data["state"].get_value("edit_note"), context={"bot": m.bot}
-        )
-        input_cd = input_data.callback_data
-        input_m, input_call = utils.split_event(input_data.event)
+        if edit_note_data:
+            edit_note_data = InputNoteContext.model_validate(
+                edit_note_data, context={"bot": m.bot}
+            )
+            any_cd = edit_note_data.callback_data
+        else:
+            assert notify_callback_data is not None
+            any_cd = notify_callback_data
+
         mood_month = await data["db"].get_mood_month(
-            input_cd.user_id, year=input_cd.year, month=input_cd.month
+            any_cd.user_id, year=any_cd.year, month=any_cd.month
         )
-        note = mood_month.get_note(input_cd.day)
+        note = mood_month.get_note(any_cd.day)
 
-        if input_cd.action == "edit":
+        is_replace_note = not note or (
+            edit_note_data and edit_note_data.callback_data.action == "edit"
+        )
+        if is_replace_note:
             new_note = m.html_text
         else:
-            new_note = (note or "") + "\n\n" + m.html_text
+            new_note = cast(str, note) + "\n\n" + m.html_text
             new_note = new_note.strip()
 
         if len(new_note) > mood_month.DAY_NOTE_LIMIT_LENGHT:
@@ -245,7 +267,7 @@ class MoodDayHandler(Handler[CallbackQuery]):
                         [
                             InlineKeyboardButton(
                                 text=i18n.close(),
-                                callback_data=DeleteMessage.merge(input_cd).pack(),
+                                callback_data=DeleteMessage.merge(any_cd).pack(),
                             )
                         ]
                     ]
@@ -254,14 +276,18 @@ class MoodDayHandler(Handler[CallbackQuery]):
             return
 
         await cls.clear_state(data["state"])
-        mood_month.save_note(input_cd.day, new_note)
+        mood_month.save_note(any_cd.day, new_note)
         await mood_month.merge()
-        panel = await cls.panel({**data, "callback_data": OpenMoodDay.merge(input_cd)})
+        panel = await cls.panel({**data, "callback_data": OpenMoodDay.merge(any_cd)})
         await m.reply(**panel)
 
-        await utils.suppress_error(input_call.answer(i18n.mood_day.note_saved()))
-        await utils.suppress_error(input_m.delete())
-        # await utils.suppress_error(m.delete())
+        if edit_note_data:
+            await utils.suppress_error(
+                edit_note_data.event.answer(i18n.mood_day.note_saved())
+            )
+            await utils.suppress_error(edit_note_data.event.message.delete())  # type: ignore
+        else:
+            await utils.suppress_error(m.reply_to_message.delete())
 
     @classmethod
     async def edit_note_callback_handler(
@@ -506,6 +532,7 @@ class MarkMoodDayHandler(Handler[CallbackQuery]):
 class NotifyJobData(TypedDict):
     user_id: int
     date: datetime.date
+    is_current_day: bool
 
 
 # @flags.UNIQE_STATE
@@ -537,6 +564,10 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
 
         cls.router.callback_query.register(
             cls.open_choice_mood_time_panel, MoodNotifyChoiceTime.filter()
+        )
+
+        cls.router.callback_query.register(
+            cls.handle_switch_day_type, MoodNotifySwitchDayType.filter()
         )
 
     @classmethod
@@ -616,11 +647,14 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         cd_ctx = OwnedCallbackData(user_id=data["user_config"].user_id)
         i18n = data["i18n"]
         utc_offset = utils.utc_offset(data["user_config"].datetime)
+        day_type = "current" if cfg.notify_current_day else "previos"
+        invert_day_type = "current" if not cfg.notify_current_day else "previos"
 
         if cfg.notify_state:
             text = data["i18n"].mood_notify.enabled(
                 chat=chat_name,
                 time=f"{cfg.notify_time_str} <code>({utc_offset})</code>",
+                day=day_type,
             )
             kb = [
                 [
@@ -642,6 +676,12 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
                         callback_data=MoodNotifySetChat.merge(
                             cd_ctx, chat_id=None
                         ).pack(),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=i18n.get(f"mood_notify-notify_{invert_day_type}_day"),
+                        callback_data=MoodNotifySwitchDayType.merge(cd_ctx).pack(),
                     )
                 ],
                 [
@@ -702,6 +742,16 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         await cls.answer(call, data, **panel)
 
     @classmethod
+    async def handle_switch_day_type(
+        cls, call: CallbackQuery, **data: Unpack[MiddlewareData]
+    ):
+        cfg = data["mood_cfg"]
+        cfg.notify_current_day = not cfg.notify_current_day
+        await cfg.merge()
+        panel = await cls.main_panel(call, data)
+        await cls.answer(call, data, **panel)
+
+    @classmethod
     async def handle_set_mood_chat_id(
         cls,
         event: Message | CallbackQuery,
@@ -717,7 +767,7 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
 
         cfg = data["mood_cfg"]
         cfg.notify_chat_id = chat_id
-        cfg.notify_chat_topic_id = m.message_thread_id
+        cfg.notify_chat_topic_id = utils.get_topic_id(m)
         await cfg.merge()
         panel = await cls.main_panel(m, data)
         await cls.answer(event, data, **panel)
@@ -765,7 +815,8 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         user_config = await dp["db"].get_user(mood_cfg.user_id)
         job_id = f"mood_notify:{mood_cfg.user_id}"
         date = datetime.datetime.now(user_config.tz).date()
-        date -= relativedelta(days=1)
+        if not mood_cfg.notify_current_day:
+            date -= relativedelta(days=1)
 
         with suppress(JobLookupError):
             scheduler.remove_job(job_id)
@@ -778,6 +829,7 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
             kwargs=NotifyJobData(
                 user_id=mood_cfg.user_id,
                 date=date,
+                is_current_day=mood_cfg.notify_current_day,
             ),
             id=job_id,
             trigger="cron",
@@ -789,8 +841,42 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         )
 
     @classmethod
+    def is_replied_to_notify_job_panel_filter(cls, m: Message):
+        if not m.reply_to_message:
+            return
+        try:
+            match m.reply_to_message.reply_markup:
+                case InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(callback_data=CD1),
+                            InlineKeyboardButton(callback_data=CD2),
+                        ],
+                        [
+                            InlineKeyboardButton(callback_data=CD3),
+                            InlineKeyboardButton(callback_data=CD4),
+                        ],
+                        [
+                            InlineKeyboardButton(callback_data=CD5),
+                            InlineKeyboardButton(callback_data=CD6),
+                        ],
+                        [
+                            InlineKeyboardButton(callback_data=CD7),
+                        ],
+                    ]
+                ) if all(
+                    MarkMoodDay.unpack(cd)  # type: ignore
+                    for cd in (CD1, CD2, CD3, CD4, CD5, CD6)  # type: ignore
+                ) and DeleteMessage.unpack(CD7):  # type: ignore
+                    cd = MarkMoodDay.unpack(CD1)  # type: ignore
+                    if m.from_user.id == cd.user_id:
+                        return cd
+        except ValueError | TypeError:
+            pass
+
+    @classmethod
     async def notify_job_panel(
-        cls, mood_cfg: MoodConfig, date: datetime.date
+        cls, mood_cfg: MoodConfig, date: datetime.date, is_current_day: bool
     ) -> dict[str, Any]:
         user_config = await dp["db"].get_user(mood_cfg.user_id)
         i18n = cast(
@@ -802,6 +888,7 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
             user_name=user_config.text_url,
             dmy=date.strftime(r"%d.%m.%Y"),
             weekday=i18n.get(f"weekday_{date.weekday() + 1}"),
+            day="current" if mood_cfg.notify_current_day else "previos",
         )
         kb = [
             *utils.chunks(
@@ -831,34 +918,38 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         return dict(text=text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
     @classmethod
-    async def notify_job_callback(cls, user_id: int, date: datetime.date):
+    async def notify_job_callback(
+        cls, user_id: int, date: datetime.date, is_current_day: bool
+    ):
         bot = dp["main_bot"]
         mood_config = await dp["db"].get_mood_config(user_id)
         job_id = f"mood_notify:{mood_config.user_id}"
 
         dp["scheduler"].modify_job(
             job_id=job_id,
-            kwargs=NotifyJobData(user_id=user_id, date=date + relativedelta(days=1)),
+            kwargs=NotifyJobData(
+                user_id=user_id,
+                date=date + relativedelta(days=1),
+                is_current_day=is_current_day,
+            ),
         )
 
-        panel = await cls.notify_job_panel(mood_config, date)
+        panel = await cls.notify_job_panel(mood_config, date, is_current_day)
         request = SendMessage(
             chat_id=mood_config.notify_chat_id or user_id,
-            message_thread_id=(
-                mood_config.notify_chat_topic_id if mood_config.notify_chat_id else None
-            ),
+            message_thread_id=mood_config.notify_chat_topic_id,
+            disable_notification=False,
             **panel,
         ).as_(bot)
         if mood_config.notify_chat_id:
             if last_message := await dp["db"].get_last_message(
                 mood_config.notify_chat_id,
-                topic_id=request.message_thread_id,
+                topic_id=mood_config.notify_chat_topic_id,
                 user_id=user_id,
             ):
                 request.reply_parameters = ReplyParameters(
                     message_id=last_message.message.message_id
                 )
-                request.message_thread_id = None
 
         try:
             try:
@@ -891,4 +982,5 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
 
 async def notify_job_callback_proxy(**data: Unpack[NotifyJobData]):
     # apscheduler only support module-side funcs
+    data.setdefault("is_current_day", False)
     return await MoodNotifyConfigurator.notify_job_callback(**data)

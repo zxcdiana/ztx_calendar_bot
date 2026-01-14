@@ -94,6 +94,10 @@ class MoodNotifySetChat(OwnedCallbackData):
     chat_id: int | None = None
 
 
+class MoodNotifySwitchDayType(OwnedCallbackData):
+    pass
+
+
 class MoodNotifyChoiceTime(OwnedCallbackData):
     pass
 

@@ -87,6 +87,7 @@ main_router = dp.include_router(Router())
 commands_router = main_router.include_router(Router())
 mood_router = commands_router.include_router(Router())
 admin_router = commands_router.include_router(Router())
+last_router = main_router.include_router(Router())
 
 
 def setup_logging():

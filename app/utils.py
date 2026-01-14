@@ -104,3 +104,8 @@ def chat_text_url(chat: Chat):
 def time_emoji(time_obj: datetime.time | datetime.datetime):
     emojis = ["🕛"] + list("🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛")
     return emojis[time_obj.hour if time_obj.hour < 12 else time_obj.hour - 12]
+
+
+def get_topic_id(m: Message):
+    if m.is_topic_message:
+        return m.message_thread_id

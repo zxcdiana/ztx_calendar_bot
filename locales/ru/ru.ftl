@@ -18,6 +18,8 @@ mood_month =
     
     <b>{ $year }, { $month }</b>
 
+    <i>Текущая дата: { $current_dmy }</i>
+
 
 mood_day-main_panel =
     <tg-emoji emoji-id="5471978009449731768">👉</tg-emoji> <b>{ $year }, { $month }, { $day }</b>
@@ -99,10 +101,16 @@ mood_notify-enabled =
                                                                                             [pm] в ЛС
                                                                                             *[other] в чат { $chat }
                                                                                                 },
-    чтобы ты заполнил предыдущий день.
+    чтобы ты заполнил { $day ->
+                        [current] текущий день.
+                        [previos] предыдущий день.
+                        *[other] день.
+                    }
 
     Каждый день в { $time }
 
+mood_notify-notify_current_day = Напоминать текущий
+mood_notify-notify_previos_day = Напоминать предыдущий
 
 turn_on = Включить
 turn_off = Выключить
@@ -117,7 +125,12 @@ mood_notify-select_time =
 
 mood_notify-notification =
     Привет, { $user_name }
-    Как прошёл вчерашний день?
+    { $day ->
+        [previos]
+        Как прошёл вчерашний день?
+        *[current]
+        Как прошёл день?
+    }
 
     <tg-emoji emoji-id="5431897022456145283">📆</tg-emoji> <b>{ $dmy }, { $weekday }</b>
 

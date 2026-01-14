@@ -44,6 +44,14 @@ class I18nStub:
         @staticmethod
         def notify(**kwargs: Any) -> Literal['Уведомления']:
             ...
+
+        @staticmethod
+        def tz(**kwargs: Any) -> Literal['Установить время']:
+            ...
+
+        @staticmethod
+        def start(**kwargs: Any) -> Literal['/start']:
+            ...
     bot_command = __BotCommand()
 
     class __Error:
@@ -85,7 +93,7 @@ class I18nStub:
     mood = __Mood()
 
     @staticmethod
-    def mood_month(*, year: Any, month: Any, **kwargs: Any) -> Literal['<tg-emoji emoji-id="5431897022456145283">📆</tg-emoji> Календарь настроения']:
+    def mood_month(*, year: Any, month: Any, current_dmy: Any, **kwargs: Any) -> Literal['<tg-emoji emoji-id="5431897022456145283">📆</tg-emoji> Календарь настроения']:
         ...
 
     class __MoodDay:
@@ -165,7 +173,15 @@ class I18nStub:
             ...
 
         @staticmethod
-        def enabled(*, chat: Any, time: Any, **kwargs: Any) -> Literal['<tg-emoji emoji-id="5449505950283078474">❤️</tg-emoji> Я буду отправлять тебе напоминания { $chat ->']:
+        def enabled(*, chat: Any, day: Any, time: Any, **kwargs: Any) -> Literal['<tg-emoji emoji-id="5449505950283078474">❤️</tg-emoji> Я буду отправлять тебе напоминания { $chat ->']:
+            ...
+
+        @staticmethod
+        def notify_current_day(**kwargs: Any) -> Literal['Напоминать текущий']:
+            ...
+
+        @staticmethod
+        def notify_previos_day(**kwargs: Any) -> Literal['Напоминать предыдущий']:
             ...
 
         @staticmethod
@@ -173,7 +189,7 @@ class I18nStub:
             ...
 
         @staticmethod
-        def notification(*, user_name: Any, dmy: Any, weekday: Any, **kwargs: Any) -> Literal['Привет, { $user_name }']:
+        def notification(*, user_name: Any, day: Any, dmy: Any, weekday: Any, **kwargs: Any) -> Literal['Привет, { $user_name }']:
             ...
     mood_notify = __MoodNotify()
 
@@ -227,15 +243,15 @@ class I18nStub:
     class __TzCommand:
 
         @staticmethod
-        def info(*, time_emoji: Any, date_time: Any, command: Any, **kwargs: Any) -> Literal['<b>Твоё время:</b>']:
+        def info(*, time_emoji: Any, date_time: Any, command: Any, **kwargs: Any) -> Literal['<b>Время у тебя:</b>']:
             ...
 
         @staticmethod
-        def changed(*, time_emoji: Any, date_time: Any, **kwargs: Any) -> Literal['✅ Время установлено!']:
+        def changed(*, time_emoji: Any, date_time: Any, **kwargs: Any) -> Literal['Время установлено!']:
             ...
 
         @staticmethod
-        def timezone404(*, query: Any, **kwargs: Any) -> Literal['✖️ Не удалось найти локацию по запросу «<code>{ $query }</code>»']:
+        def timezone404(*, query: Any, **kwargs: Any) -> Literal["<tg-emoji emoji-id='5465665476971471368'>❌</tg-emoji> Не удалось найти локацию по запросу «<code>{ $query }</code>»"]:
             ...
     tz_command = __TzCommand()
 
