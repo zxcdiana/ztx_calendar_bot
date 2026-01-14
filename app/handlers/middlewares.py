@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
     from aiogram.dispatcher.middlewares.user_context import EventContext
 
+    from app.meta import AppMetadata
     from app.i18n import I18nContext, I18nMiddleware
     from app.database import Database, UserConfig, MoodConfig
     from app.scheduler import Scheduler
@@ -29,6 +30,7 @@ class MiddlewareData(_MiddlewareData):
     scheduler: Scheduler
     geo: Geolocator
     app_cfg: AppConfig
+    app_metadata: AppMetadata
     mood_cfg: MoodConfig
     user_config: UserConfig
     i18n: I18nContext

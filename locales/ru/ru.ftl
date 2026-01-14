@@ -2,6 +2,7 @@ bot_command-mood = Календарь настроения
 bot_command-notify = Уведомления
 bot_command-tz = Установить время
 bot_command-start = /start
+bot_command-version = Версия бота
 
 error-button_wrong_user = Не твоя кнопка
 
@@ -177,3 +178,17 @@ weekday_4 = Четверг
 weekday_5 = Пятница
 weekday_6 = Суббота
 weekday_7 = Воскресенье
+
+
+command_version-panel =
+    » <a href="{ $homepage }">{ $name }</a>
+
+    <i>— { $description }</i>
+
+    ⚙️ Версия: <code>{ $version }</code>
+
+command_version-button_source =
+    💾 Исходный код
+
+command_version-button_starplz =
+    ⭐️ Поддержать звездочкой

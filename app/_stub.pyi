@@ -52,6 +52,10 @@ class I18nStub:
         @staticmethod
         def start(**kwargs: Any) -> Literal['/start']:
             ...
+
+        @staticmethod
+        def version(**kwargs: Any) -> Literal['Версия бота']:
+            ...
     bot_command = __BotCommand()
 
     class __Error:
@@ -330,3 +334,18 @@ class I18nStub:
     @staticmethod
     def weekday_7(**kwargs: Any) -> Literal['Воскресенье']:
         ...
+
+    class __CommandVersion:
+
+        @staticmethod
+        def panel(*, homepage: Any, name: Any, description: Any, version: Any, **kwargs: Any) -> Literal['» <a href="{ $homepage }">{ $name }</a>']:
+            ...
+
+        @staticmethod
+        def button_source(**kwargs: Any) -> Literal['💾 Исходный код']:
+            ...
+
+        @staticmethod
+        def button_starplz(**kwargs: Any) -> Literal['⭐️ Поддержать звездочкой']:
+            ...
+    command_version = __CommandVersion()

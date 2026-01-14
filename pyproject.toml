@@ -1,6 +1,6 @@
 [project]
 name = "ztx-calendar-bot"
-version = "1.4.0"
+version = "1.4.1"
 description = "Calendar Telegram Bot"
 readme = "README.md"
 authors = [
@@ -28,6 +28,9 @@ dependencies = [
     "typer-slim>=0.21.1",
     "uvloop>=0.22.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/zxcdiana/ztx_calendar_bot"
 
 [dependency-groups]
 dev = [

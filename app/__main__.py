@@ -8,6 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from app import main
 from app import handlers
+from app.meta import get_app_metadata
 from app.main import dp, setup_logging
 from app.config import get_app_config
 from app.database import Database
@@ -37,6 +38,7 @@ def run_app(
 
     setup_logging()
 
+    dp["app_metadata"] = get_app_metadata()
     dp["db"] = Database()
     dp["scheduler"] = Scheduler()
     dp["geo"] = Geolocator()

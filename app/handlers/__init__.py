@@ -13,6 +13,7 @@ def register():
         start,
         emoji,
         user_config,
+        version,
     )
 
     common.Handler.register_all()

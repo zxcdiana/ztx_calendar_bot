@@ -33,6 +33,7 @@ DEV_MODE: bool
 # fmt: off
 if TYPE_CHECKING:
     from app.config import AppConfig
+    from app.meta import AppMetadata
     from app.i18n import I18nMiddleware
     from app.database import Database
     from app.scheduler import Scheduler
@@ -43,6 +44,8 @@ if TYPE_CHECKING:
     class Dispatcher(aiogram.Dispatcher):
         @overload
         def __getitem__(self, key: Literal['app_cfg']) -> AppConfig: ...
+        @overload
+        def __getitem__(self, key: Literal['app_metadata']) -> AppMetadata: ...
         @overload
         def __getitem__(self, key: Literal['main_bot']) -> Bot: ...
         @overload
@@ -122,7 +125,7 @@ def get_my_commands() -> list[SetMyCommands]:
                         command=cmd,
                         description=core.get(f"bot_command-{cmd}", language_code),
                     )
-                    for cmd in ["start", "mood", "notify", "tz"]
+                    for cmd in ["start", "mood", "notify", "tz", "version"]
                 ],
             )
         )
