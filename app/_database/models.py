@@ -126,7 +126,7 @@ class UserConfig(DatabaseMixin[orm.UserConfig]):
         return ZoneInfo(self.timezone or "Europe/Kyiv")
 
     @property
-    def datetime(self):
+    def current_time(self):
         return datetime.datetime.now(self.tz)
 
     @property

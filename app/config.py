@@ -39,9 +39,9 @@ class AppConfig(BaseSettings):
         uri = self.postgres_url.get_secret_value()
         uri = uri[len(re.match(r"postgres(ql|)://", uri)[0]) :]  # pyright: ignore[reportOptionalSubscript]
         if mode == "sync":
-            return f"postgresql+psycopg2://{uri}"
+            return f"postgresql+psycopg://{uri}"
         elif mode == "async":
-            return f"postgresql+asyncpg://{uri}"
+            return f"postgresql+psycopg://{uri}"
         else:
             raise ValueError(f"invalid mode: {mode}")
 

@@ -191,4 +191,4 @@ command_version-button_source =
     💾 Исходный код
 
 command_version-button_starplz =
-    ⭐️ Поддержать звездочкой
+    ⭐️ Поддержать звездой

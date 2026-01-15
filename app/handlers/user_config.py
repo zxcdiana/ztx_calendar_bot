@@ -104,9 +104,9 @@ async def set_timezone(
     if command.args is None:
         await answer(
             text=i18n.tz_command.info(
-                time_emoji=utils.time_emoji(user_config.datetime),
-                date_time=user_config.datetime.strftime(
-                    date_time_fmt.format(utils.utc_offset(user_config.datetime))
+                time_emoji=utils.time_emoji(user_config.current_time),
+                date_time=user_config.current_time.strftime(
+                    date_time_fmt.format(utils.utc_offset(user_config.current_time))
                 ),
                 command=command.text,
             )
@@ -139,9 +139,9 @@ async def set_timezone(
 
     await loading.edit_text(
         text=i18n.tz_command.changed(
-            time_emoji=utils.time_emoji(user_config.datetime),
-            date_time=user_config.datetime.strftime(
-                date_time_fmt.format(utils.utc_offset(user_config.datetime))
+            time_emoji=utils.time_emoji(user_config.current_time),
+            date_time=user_config.current_time.strftime(
+                date_time_fmt.format(utils.utc_offset(user_config.current_time))
             ),
         )
     )

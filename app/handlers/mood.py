@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import math
 import datetime
+import re
 from typing import Any, Literal, TypedDict, Unpack, cast
 from contextlib import asynccontextmanager, suppress
 from collections import defaultdict
@@ -19,20 +20,20 @@ from aiogram.types import (
     TelegramObject,
     ReplyParameters,
 )
-from aiogram.filters import or_f, Command, StateFilter
+from aiogram.filters import or_f, Command, StateFilter, MagicData
 from aiogram.fsm.state import default_state
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramAPIError
 from aiogram.methods import SendMessage
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app import utils
 from app import main
 from app.main import dp, mood_router
 from app.mood import Mood, date_to_dict
 from app.i18n import I18nContext
-from app.database import MoodConfig
+from app.database import MoodConfig, UserConfig
 
 from app.handlers.common import Handler
 from app.handlers.middlewares import MiddlewareData
@@ -83,7 +84,7 @@ class MoodMonthHandler(Handler[Message | CallbackQuery]):
         text = data["i18n"].mood_month(
             year=str(cd.year),
             month=cls.str_month(data["i18n"], month=cd.month),
-            current_dmy=data["user_config"].datetime.strftime(r"%d.%m.%y"),
+            current_dmy=data["user_config"].current_time.strftime(r"%d.%m.%y"),
         )
         kb: list[list[InlineKeyboardButton]] = [
             *utils.chunks(
@@ -156,7 +157,7 @@ class MoodMonthHandler(Handler[Message | CallbackQuery]):
     async def handle(self) -> Any:
         m, call = utils.split_event(self.event)
         if not call:
-            user_date = self.data["user_config"].datetime
+            user_date = self.data["user_config"].current_time
             self.data["callback_data"] = MoodMonthCallback(
                 user_id=self.event.from_user.id,
                 year=user_date.year,
@@ -185,15 +186,101 @@ class InputNoteContext(BaseModel):
     event: CallbackQuery
 
 
-class MoodDayHandler(Handler[CallbackQuery]):
+class MoodCommandArgs(utils.Regexp):
+    __pattern__ = (
+        r"(?P<day>\d{1,2})"
+        r"|(?P<day_month>\d{1,2}\.\d{1,2})"
+        r"|(?P<dmy>\d{1,2}\.\d{1,2}.\d{2,4})"
+        r"|(?P<year>\d{4})"
+        r"|(?P<yesterday>[вчера]{1,5})"
+        r"|(?P<ereyesterday>[позавчера]{3,9})"
+        r"|(?P<today>[сегодня]{1,7})"
+        r"|(?P<tomorrow>[завтра]{1,6})"
+        r"|(?P<overmorrow>[послезавтра]{3,11})"
+    )
+
+    day: int | None
+    day_month: str | None
+    dmy: str | None
+    year: int | None
+    ereyesterday: bool
+    yesterday: bool
+    today: bool
+    tomorrow: bool
+    overmorrow: bool
+
+    @field_validator(
+        "ereyesterday", "yesterday", "today", "tomorrow", "overmorrow", mode="before"
+    )
+    @classmethod
+    def _validate_relative_days(cls, value: str | None):
+        return bool(value)
+
+    def generate_callback_data(self, user_config: UserConfig) -> OpenMoodDay:
+        date = user_config.current_time
+        if self.ereyesterday:
+            date -= relativedelta(days=2)
+        elif self.yesterday:
+            date -= relativedelta(days=1)
+        elif self.today:
+            date = date
+        elif self.tomorrow:
+            date += relativedelta(days=1)
+        elif self.overmorrow:
+            date += relativedelta(days=2)
+        elif self.day:
+            date = date.replace(day=self.day)
+        elif self.day_month:
+            day, month = map(int, self.day_month.split("."))
+            date = date.replace(day=day, month=month)
+        elif self.dmy:
+            day, month, year = self.dmy.split(".")
+            if len(year) == 2:
+                year = str(date.year)[:-2] + year
+            date = date.replace(int(year), int(month), int(day))
+        elif self.year:
+            date = date.replace(year=self.year)
+        return OpenMoodDay(user_id=user_config.user_id, **date_to_dict(date))
+
+
+class MoodDayHandler(Handler[Message | CallbackQuery]):
     @classmethod
     def register(cls) -> None:
         flags.UNIQE_STATE(cls)
 
         mood_router.callback_query.register(
             cls,
-            OpenMoodDay.filter(),
             StateFilter(None, input_state.EDIT_NOTE, input_state.EXTEND_NOTE),
+            OpenMoodDay.filter(),
+        )
+        mood_router.message.register(
+            cls,
+            StateFilter(None, input_state.EDIT_NOTE, input_state.EXTEND_NOTE),
+            or_f(
+                Command("mood"),
+                MagicData(
+                    (F.event.text | F.event.caption)
+                    .regexp(
+                        r"муд(?: *(?P<args>.+)|)", flags=re.IGNORECASE, mode="fullmatch"
+                    )
+                    .as_("command_match")
+                ),
+            ),
+            MagicData(
+                (
+                    F.command.args.lower()
+                    .func(MoodCommandArgs.fullmatch, user_config=F.user_config)
+                    .as_("args")
+                )
+                | (
+                    F.command_match.group("args")
+                    .lower()
+                    .func(MoodCommandArgs.fullmatch, user_config=F.user_config)
+                    .as_("args")
+                )
+                | (F.command & ~F.command.args)
+                | (F.command_match & ~F.command_match.group("args"))
+            ),
         )
 
         mood_router.callback_query.register(
@@ -222,6 +309,30 @@ class MoodDayHandler(Handler[CallbackQuery]):
     async def clear_state(cls, state: FSMContext):
         await state.set_state(None)
         await state.update_data(edit_note=None)
+
+    async def handle(self):
+        await self.clear_state(self.data["state"])
+        m, call = utils.split_event(self.event)
+
+        if call:
+            panel = await self.panel(self.data)
+            await m.edit_text(**panel)
+        else:
+            args = cast(MoodCommandArgs | None, self.data.get("args"))
+            user_config = self.data["user_config"]
+            if args:
+                try:
+                    callback_data = args.generate_callback_data(user_config)
+                except Exception:
+                    return
+            else:
+                user_time = user_config.current_time
+                callback_data = OpenMoodDay(
+                    user_id=user_config.user_id, **date_to_dict(user_time)
+                )
+            panel = await self.panel({**self.data, "callback_data": callback_data})
+            method = m.answer if m.chat.type == "private" else m.reply
+            await method(**panel)
 
     @classmethod
     async def edit_note_handler(
@@ -494,11 +605,6 @@ class MoodDayHandler(Handler[CallbackQuery]):
 
         return {"text": text, "reply_markup": InlineKeyboardMarkup(inline_keyboard=kb)}
 
-    async def handle(self):
-        await self.clear_state(self.data["state"])
-        panel = await self.panel(self.data)
-        await self.event.message.edit_text(**panel)  # type: ignore
-
 
 class MarkMoodDayHandler(Handler[CallbackQuery]):
     @classmethod
@@ -646,7 +752,7 @@ class MoodNotifyConfigurator(Handler[Message | CallbackQuery]):
         chat_name = utils.chat_text_url(chat) if chat else "pm"
         cd_ctx = OwnedCallbackData(user_id=data["user_config"].user_id)
         i18n = data["i18n"]
-        utc_offset = utils.utc_offset(data["user_config"].datetime)
+        utc_offset = utils.utc_offset(data["user_config"].current_time)
         day_type = "current" if cfg.notify_current_day else "previos"
         invert_day_type = "current" if not cfg.notify_current_day else "previos"
 

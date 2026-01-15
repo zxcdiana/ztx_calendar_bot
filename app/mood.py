@@ -1,12 +1,13 @@
 import enum
-from datetime import date
+import datetime
+from typing import Any
 from dateutil.relativedelta import relativedelta
 
 
 class _MoodMonthMixin:
     @property
     def date(self):
-        return date(self.year, self.month, getattr(self, "day", 1))  # type: ignore
+        return datetime.date(self.year, self.month, getattr(self, "day", 1))  # type: ignore
 
 
 class Mood(enum.Enum):
@@ -34,18 +35,18 @@ class Mood(enum.Enum):
 
 
 def create_days_list(year: int, month: int) -> list[Mood]:
-    month_date = date(year, month, 1)
+    month_date = datetime.date(year, month, 1)
     days = days_in_month(month_date)
     return [Mood.UNSET] * days
 
 
 def create_days_notes_list(year: int, month: int) -> list[str | None]:
-    return [None] * days_in_month(date(year, month, 1))
+    return [None] * days_in_month(datetime.date(year, month, 1))
 
 
-def days_in_month(date: date):
+def days_in_month(date: datetime.date):
     return (date + relativedelta(months=1) - date).days
 
 
-def date_to_dict(date: date):
+def date_to_dict(date: datetime.date | datetime.datetime) -> dict[str, Any]:
     return dict(year=date.year, month=date.month, day=date.day)
